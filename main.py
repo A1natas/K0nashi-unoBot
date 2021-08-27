@@ -49,9 +49,10 @@ started = 0
 hand_cards = []
 manager = None
 homegroup = 0
+gamerIdList = []
 
 def init():
-    global created,gamers,homeowner,findingGamers,started,hand_cards,manager,homegroup
+    global created,gamers,homeowner,findingGamers,started,hand_cards,manager,homegroup,gamerIdList
     created = 0
     gamers = []
     homeowner = 0
@@ -59,12 +60,28 @@ def init():
     findingGamers= 0
     started = 0
     manager = None
+    gamerIdList = []
 
 @bcc.receiver("GroupMessage")
 async def group_message_handler(app: GraiaMiraiApplication, message: MessageChain, group: Group, member: Member):
-    global created,testing,gamers,homeowner,findingGamers,started,hand_cards,manager,homegroup
+    global created,testing,gamers,homeowner,findingGamers,started,hand_cards,manager,homegroup,gamerIdList
     if message.asDisplay() == "uno help":
-        outmsg = """指令列表：\nuno create 创建一场游戏，使用该指令者会被作为房主，管理本场游戏的开始结束。\n我来   当有人使用uno create后，其他人用于加入游戏\nuno start  房主等想来玩的人齐了以后使用该指令开始游戏\nuno over 在create之后如果不玩了记得使用这个指令释放，否则别人也玩不了\n看牌  使用后bot会私聊你的手牌是什么\n游戏命令:\n普通牌/功能牌出牌（例：红9/蓝禁）   如果手中有这张牌，轮到你的时候就可以将这张牌打出\n万能牌出牌（例：变色 黄）   万能牌出牌时需要指定之后的颜色，所以需要在牌的名称后加上颜色的名字\n摸  当你没有东西能出的时候（非禁），可以摸牌\n过  当你上家出了“禁”，而你没有禁可以出的时候，或者你被禁还未解禁的时候，用于跳过本回合 """
+        outmsg = """指令列表
+uno create:创建一场游戏，使用该指令者会被作为房主，管理本场游戏的开始结束。
+我来:当有人使用uno create后，其他人用于加入游戏
+我爬:在还未start的时候，使用“我爬”,可以退出房间 
+uno start:房主等想来玩的人齐了以后使用该指令开始游戏
+uno over:在create之后如果不玩了记得使用这个指令释放，否则别人也玩不了
+看牌:使用后bot会私聊你的手牌是什么
+游戏命令:
+普通牌/功能牌出牌（例：红9/蓝禁）:如果手中有这张牌，轮到你的时候就可以将这张牌打出
+万能牌出牌（例：变色 黄）:万能牌出牌时需要指定之后的颜色，所以需要在牌的名称后加上颜色的名字
+摸:当你没有东西能出的时候（非禁），可以摸牌
+过:当你上家出了“禁”，而你没有禁可以出的时候，或者你被禁还未解禁的时候使用，用于跳过本回合
+出/不出:在摸之后（+2/+4后除外），如果摸到的牌可以出，则可以选择是否打出这张牌
+uno:当某个人出完牌后如果只剩下一张牌，则需要说uno，否则如果在下一个玩家出牌之前被人出警，则会被罚摸两张牌
+没说uno:可以出警别人有没有忘说uno,仅在下一个人出牌前有效
+游戏规则：你不会百度吗？"""
         await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
     if message.asDisplay() == "uno create":
         if created:
@@ -90,6 +107,11 @@ async def group_message_handler(app: GraiaMiraiApplication, message: MessageChai
         else:
             outmsg = "你在队里了"
             await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
+    if message.asDisplay() == "我爬" and not started and member in gamers and member.id != homeowner:
+        gamers.remove(member)
+        outmsg = member.name + "灰溜溜的爬了"
+        await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
+
     if message.asDisplay() == "uno start" and member.id == homeowner:
         if len(gamers) < 3 and not testing:
             outmsg = "人不够，您再等等"
@@ -97,6 +119,8 @@ async def group_message_handler(app: GraiaMiraiApplication, message: MessageChai
         else:
             outmsg = "游戏开始！"
             await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
+            for i in range(1,len(gamers)+1):
+                gamerIdList.append(str(i))
             findingGamers = 0
             started = 1
             manager = Uno_Manager(len(gamers))
@@ -109,7 +133,6 @@ async def group_message_handler(app: GraiaMiraiApplication, message: MessageChai
                 cards = sorted(manager.getHandCards()[gamers.index(eachmambers)],key = lambda x:manager.cardOrder.index(x))
                 outmsg = "你的手牌是：" + "、".join(cards)
                 await app.sendTempMessage(group,eachmambers,MessageChain.create([Plain(outmsg)]))
-                await asyncio.sleep(1)
     if message.asDisplay() == "看牌" and started and member in gamers and started:   
         cards = sorted(manager.getHandCards()[gamers.index(member)],key = lambda x:manager.cardOrder.index(x))
         outmsg = "你的手牌是：" + "、".join(cards)
@@ -150,14 +173,35 @@ async def group_message_handler(app: GraiaMiraiApplication, message: MessageChai
             if manager.outCard(gamers.index(member),cardname,color):
                 outmsg = member.name + " 出了一张：" + manager.getLastCard()
                 await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
-                manager.lastOneCheck()
-                manager.turnNext()
                 winnerId = manager.winCheck()
                 if winnerId != -1:
                     outmsg = "游戏结束，获胜者：" + member.name
                     await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
                     init()
                     return
+                manager.lastOneCheck()
+                swaped = 0
+                if (swapcard := manager.getSwapCard()):
+                    if swapcard & 0b01:
+                        manager.zeroSwap()
+                        outmsg = "所有人手牌递交给下家！"
+                        await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
+                        manager.lastOneCheck()
+                        for eachmambers in gamers:
+                            cards = sorted(manager.getHandCards()[gamers.index(eachmambers)],key = lambda x:manager.cardOrder.index(x))
+                            outmsg = "你的手牌是：" + "、".join(cards)
+                            await app.sendTempMessage(group,eachmambers,MessageChain.create([Plain(outmsg)]))
+                        swaped = 1
+                    elif swapcard & 0b10:
+                        outmsg = "请选择你要交换的玩家编号：（例如：1）\n"
+                        gamerid = 1
+                        for i in gamers:
+                            outmsg += str(gamerid) + "." + i.name + "还剩" + str(len(manager.getHandCards()[gamerid-1])) + "张牌" +"\n"
+                            gamerid += 1
+                        await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
+                        manager.waitingSwap()
+                        return
+                manager.turnNext()
                 outmsg = "现在轮到：" + gamers[manager.getTurn()].name + "出牌了，Ta还剩" + str(len(manager.getHandCards()[manager.getTurn()])) + "张牌"
                 if manager.getLastCard() != "":
                     outmsg += ",上一张牌是：" + manager.getLastCard()
@@ -165,13 +209,14 @@ async def group_message_handler(app: GraiaMiraiApplication, message: MessageChai
                 if manager.banCheck(manager.getTurn()):
                     outmsg = gamers[manager.getTurn()].name + "还有" + str(manager.getBanDict(manager.getTurn())) + "回合解禁，请选择“过”"
                     await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
-                cards = sorted(manager.getHandCards()[gamers.index(member)],key = lambda x:manager.cardOrder.index(x))
-                outmsg = "你的手牌是：" + "、".join(cards)
-                await app.sendTempMessage(group,member,MessageChain.create([Plain(outmsg)]))
-                nextmember = gamers[manager.getTurn()]
-                cards = sorted(manager.getHandCards()[gamers.index(nextmember)],key = lambda x:manager.cardOrder.index(x))
-                outmsg = "你的手牌是：" + "、".join(cards)
-                await app.sendTempMessage(group,nextmember,MessageChain.create([Plain(outmsg)]))
+                if not swaped:
+                    cards = sorted(manager.getHandCards()[gamers.index(member)],key = lambda x:manager.cardOrder.index(x))
+                    outmsg = "你的手牌是：" + "、".join(cards)
+                    await app.sendTempMessage(group,member,MessageChain.create([Plain(outmsg)]))
+                    nextmember = gamers[manager.getTurn()]
+                    cards = sorted(manager.getHandCards()[gamers.index(nextmember)],key = lambda x:manager.cardOrder.index(x))
+                    outmsg = "你的手牌是：" + "、".join(cards)
+                    await app.sendTempMessage(group,nextmember,MessageChain.create([Plain(outmsg)]))
             else:
                 outmsg = "你不能出这个哦，上一张牌是：" + manager.getLastCard()
                 await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
@@ -229,8 +274,17 @@ async def group_message_handler(app: GraiaMiraiApplication, message: MessageChai
                 outmsg= member.name + "选择了跳过，被禁了" + str(manager.getBanFlag()) + "回合"
                 await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
             manager.banCount()
+
             if (skipFlag & 0b01) != 0:
-                outmsg= member.name + "还要被禁" + str(manager.getBanDict(manager.getTurn())) + "回合"
+                bandict = manager.getBanDict(manager.getTurn())
+                if bandict > 0:
+                    outmsg= member.name + "还要被禁" + str(bandict) + "回合"
+                else:
+                    outmsg= member.name + "解禁"
+                if plusNum := manager.getPlusNum():
+                    outmsg += ",并摸了" + str(plusNum) + "张牌"
+                manager.gamerDraw(gamers.index(member),plusNum)
+                manager.resetPlusNum()
                 await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
             manager.turnNext()
             outmsg = "现在轮到：" + gamers[manager.getTurn()].name + "出牌了，Ta还剩" + str(len(manager.getHandCards()[manager.getTurn()])) + "张牌"
@@ -338,7 +392,40 @@ async def group_message_handler(app: GraiaMiraiApplication, message: MessageChai
             cards = sorted(manager.getHandCards()[gamers.index(member)],key = lambda x:manager.cardOrder.index(x))
             outmsg = "你的手牌是：" + "、".join(cards)
             await app.sendTempMessage(group,member,MessageChain.create([Plain(outmsg)]))
-        
+    if message.asDisplay() in gamerIdList and started and member in gamers and manager.getWaitSwap():
+        if not manager.isTurn(gamers.index(member)):
+            outmsg="现在不是你的回合"
+            await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
+            return
+        if gamers.index(member) == int(message.asDisplay())-1:
+            outmsg="不能跟自己换牌"
+            await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
+            return
+        manager.sevenSwap(gamers.index(member),int(message.asDisplay())-1)
+        outmsg = "交换了 " + member.name +" 和" + gamers[int(message.asDisplay())-1].name +"的手牌"
+        await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
+        cards = sorted(manager.getHandCards()[gamers.index(member)],key = lambda x:manager.cardOrder.index(x))
+        outmsg = "你的手牌是：" + "、".join(cards)
+        await app.sendTempMessage(group,member,MessageChain.create([Plain(outmsg)]))
+        cards = sorted(manager.getHandCards()[int(message.asDisplay())-1],key = lambda x:manager.cardOrder.index(x))
+        outmsg = "你的手牌是：" + "、".join(cards)
+        await app.sendTempMessage(group,gamers[int(message.asDisplay())-1],MessageChain.create([Plain(outmsg)]))
+        manager.lastOneCheck()
+        manager.turnNext()
+        outmsg = "现在轮到：" + gamers[manager.getTurn()].name + "出牌了，Ta还剩" + str(len(manager.getHandCards()[manager.getTurn()])) + "张牌"
+        if manager.getLastCard() != "":
+            outmsg += ",上一张牌是：" + manager.getLastCard()
+        await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
+        if manager.banCheck(manager.getTurn()):
+            outmsg = gamers[manager.getTurn()].name + "还有" + str(manager.getBanDict(manager.getTurn())) + "回合解禁，请选择“过”"
+            await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
+        nextmember = gamers[manager.getTurn()]
+        cards = sorted(manager.getHandCards()[gamers.index(nextmember)],key = lambda x:manager.cardOrder.index(x))
+        outmsg = "你的手牌是：" + "、".join(cards)
+        await app.sendTempMessage(group,nextmember,MessageChain.create([Plain(outmsg)]))
+
+
+
 app.launch_blocking()
 
 try:

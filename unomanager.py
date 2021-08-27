@@ -37,15 +37,12 @@ class Uno_Manager:
             self.gaming_cards.extend(new_cards)
         draw_card = self.gaming_cards[:num]
         self.gaming_cards = self.gaming_cards[num:]
-        print(draw_card)
-        print(self.gaming_cards)
+
         return draw_card
-        # return ["变色"] + ["变色"] 
+        # return ["红禁"] + ["红+2"] + ["红禁"] + ["红+2"]
 
     def gamerDraw(self,gamerId,num):
-        print(gamerId)
         self.hand_cards[gamerId].extend(self.draw(num))
-        print(self.hand_cards[gamerId])
 
     def startUno(self):
         self.gaming_cards = Uno_Manager.cards
@@ -63,6 +60,8 @@ class Uno_Manager:
         self.checkAfterTouchFlag = False
         self.unoFlag = {}
         self.lastOneCheckFlag = -1
+        self.swapCard = 0b00
+        self.waitSwap = 0
 
     def getHandCards(self):
         return self.hand_cards
@@ -99,6 +98,12 @@ class Uno_Manager:
                 self.lastPlus = 2
                 self.plusNum +=2
 
+    def getPlusNum(self):
+        return self.plusNum
+
+    def resetPlusNum(self):
+        self.plusNum = 0
+
     def getLastCard(self):
         if "$" in self.lastCard:
             if self.lastPlus == 0:
@@ -117,8 +122,6 @@ class Uno_Manager:
                 return False
             else: 
                 pass
-        print(self.hand_cards)
-        print(cardname)
         self.hand_cards[gamerId].remove(cardname)
         self.changelastCard(cardname,color)
         if "转" in cardname:
@@ -126,7 +129,10 @@ class Uno_Manager:
         if "禁" in cardname:
             self.banFlag += 1
         if "0" or "7" in cardname:
-            pass
+            if "0" in cardname:
+                self.swapCard |= 0b01
+            if "7" in cardname:
+                self.swapCard |= 0b10
         return True
     
     def winCheck(self):
@@ -219,4 +225,37 @@ class Uno_Manager:
     
     def getLastOneCheckFlag(self):
         return self.lastOneCheckFlag
-        
+    
+    def getSwapCard(self):
+        return self.swapCard
+    
+    def zeroSwap(self):
+        print(self.hand_cards)
+        newHandCards = []
+        if self.turnForward == 1:
+            newHandCards.append(self.hand_cards[-1])
+            for i in range(len(self.hand_cards) - 1):
+                newHandCards.append(self.hand_cards[i])
+        else:
+            for i in range(1,len(self.hand_cards)):
+                newHandCards.append(self.hand_cards[i])
+            newHandCards.append(self.hand_cards[0])    
+        self.hand_cards = newHandCards
+        self.waitSwap = 0
+        self.swapCard = 0
+        print(self.hand_cards)
+
+
+    def sevenSwap(self,gamerIda,gamerIdb):
+        print(self.hand_cards)
+        print(gamerIda,gamerIdb)
+        self.hand_cards[gamerIda],self.hand_cards[gamerIdb] = self.hand_cards[gamerIdb],self.hand_cards[gamerIda]
+        self.waitSwap = 0
+        self.swapCard = 0
+        print(self.hand_cards)
+
+    def waitingSwap(self):
+        self.waitSwap = 1
+    
+    def getWaitSwap(self):
+        return self.waitSwap
