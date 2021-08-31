@@ -202,6 +202,7 @@ uno:当某个人出完牌后如果只剩下一张牌，则需要说uno，否则�
                         manager.waitingSwap()
                         return
                 manager.turnNext()
+                manager.resetUnoed()
                 outmsg = "现在轮到：" + gamers[manager.getTurn()].name + "出牌了，Ta还剩" + str(len(manager.getHandCards()[manager.getTurn()])) + "张牌"
                 if manager.getLastCard() != "":
                     outmsg += ",上一张牌是：" + manager.getLastCard()
@@ -248,6 +249,7 @@ uno:当某个人出完牌后如果只剩下一张牌，则需要说uno，否则�
             await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
             return
         manager.turnNext()
+        manager.resetUnoed()
         outmsg = "现在轮到：" + gamers[manager.getTurn()].name + "出牌了，Ta还剩" + str(len(manager.getHandCards()[manager.getTurn()])) + "张牌"
         if manager.getLastCard() != "":
             outmsg += ",上一张牌是：" + manager.getLastCard()
@@ -287,6 +289,7 @@ uno:当某个人出完牌后如果只剩下一张牌，则需要说uno，否则�
                 manager.resetPlusNum()
                 await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
             manager.turnNext()
+            manager.resetUnoed()
             outmsg = "现在轮到：" + gamers[manager.getTurn()].name + "出牌了，Ta还剩" + str(len(manager.getHandCards()[manager.getTurn()])) + "张牌"
             if manager.getLastCard() != "":
                 outmsg += ",上一张牌是：" + manager.getLastCard()
@@ -340,7 +343,29 @@ uno:当某个人出完牌后如果只剩下一张牌，则需要说uno，否则�
         if message.asDisplay() == "不出" and member == gamers[manager.getTurn()]:
             pass
         manager.resetCheckAfterTouchFlag()
+        swaped = 0
+        if (swapcard := manager.getSwapCard()):
+            if swapcard & 0b01:
+                manager.zeroSwap()
+                outmsg = "所有人手牌递交给下家！"
+                await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
+                manager.lastOneCheck()
+                for eachmambers in gamers:
+                    cards = sorted(manager.getHandCards()[gamers.index(eachmambers)],key = lambda x:manager.cardOrder.index(x))
+                    outmsg = "你的手牌是：" + "、".join(cards)
+                    await app.sendTempMessage(group,eachmambers,MessageChain.create([Plain(outmsg)]))
+                swaped = 1
+            elif swapcard & 0b10:
+                outmsg = "请选择你要交换的玩家编号：（例如：1）\n"
+                gamerid = 1
+                for i in gamers:
+                    outmsg += str(gamerid) + "." + i.name + "还剩" + str(len(manager.getHandCards()[gamerid-1])) + "张牌" +"\n"
+                    gamerid += 1
+                await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
+                manager.waitingSwap()
+                return
         manager.turnNext()
+        manager.resetUnoed()
         outmsg = "现在轮到：" + gamers[manager.getTurn()].name + "出牌了，Ta还剩" + str(len(manager.getHandCards()[manager.getTurn()])) + "张牌"
         if manager.getLastCard() != "":
             outmsg += ",上一张牌是：" + manager.getLastCard()
@@ -364,15 +389,15 @@ uno:当某个人出完牌后如果只剩下一张牌，则需要说uno，否则�
             if not member in gamers:
                 return
             unoFlag = manager.getLastOneCheckFlag()
-            if unoFlag == -1:
+            if (unoFlag == -1 and member != gamers[manager.getTurn()] and (member == gamers[manager.getTurn()] and len(manager.getHandCards[manager.getTurn()]) != 2)):
                 outmsg = "你uno nm呢？"
                 await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)])) 
                 return
             if gamers.index(member) == unoFlag:
                 manager.resetLastOneCheckFlag()
-            else:
-                print("uno error")
-
+                return
+            manager.setUnoed()
+            
     if message.asDisplay() == "没说uno" and started and member in gamers:
         lastOneCheckFlag = manager.getLastOneCheckFlag()
         if lastOneCheckFlag != -1:
@@ -412,6 +437,7 @@ uno:当某个人出完牌后如果只剩下一张牌，则需要说uno，否则�
         await app.sendTempMessage(group,gamers[int(message.asDisplay())-1],MessageChain.create([Plain(outmsg)]))
         manager.lastOneCheck()
         manager.turnNext()
+        manager.resetUnoed()
         outmsg = "现在轮到：" + gamers[manager.getTurn()].name + "出牌了，Ta还剩" + str(len(manager.getHandCards()[manager.getTurn()])) + "张牌"
         if manager.getLastCard() != "":
             outmsg += ",上一张牌是：" + manager.getLastCard()
@@ -423,6 +449,12 @@ uno:当某个人出完牌后如果只剩下一张牌，则需要说uno，否则�
         cards = sorted(manager.getHandCards()[gamers.index(nextmember)],key = lambda x:manager.cardOrder.index(x))
         outmsg = "你的手牌是：" + "、".join(cards)
         await app.sendTempMessage(group,nextmember,MessageChain.create([Plain(outmsg)]))
+
+    if message.asDisplay() == "玩家列表" and started == 1 and member in gamers:
+        for i in gamers:
+            outmsg += str(gamerid) + "." + i.name + "还剩" + str(len(manager.getHandCards()[gamerid-1])) + "张牌" +"\n"
+            gamerid += 1
+        await app.sendGroupMessage(group,MessageChain.create([Plain(outmsg)]))
 
 
 

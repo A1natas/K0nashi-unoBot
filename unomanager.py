@@ -38,8 +38,8 @@ class Uno_Manager:
         draw_card = self.gaming_cards[:num]
         self.gaming_cards = self.gaming_cards[num:]
 
-        return draw_card
-        # return ["红禁"] + ["红+2"] + ["红禁"] + ["红+2"]
+        # return draw_card
+        return ["变色"] + ["变色"]
 
     def gamerDraw(self,gamerId,num):
         self.hand_cards[gamerId].extend(self.draw(num))
@@ -62,6 +62,7 @@ class Uno_Manager:
         self.lastOneCheckFlag = -1
         self.swapCard = 0b00
         self.waitSwap = 0
+        self.unoed = 0
 
     def getHandCards(self):
         return self.hand_cards
@@ -146,6 +147,7 @@ class Uno_Manager:
             return True
         elif outCard == self.lastCard:
             self.turnId = gamerId
+            self.resetUnoed()
             return True
         return False
 
@@ -216,7 +218,7 @@ class Uno_Manager:
         self.checkAfterTouchFlag = False
 
     def lastOneCheck(self):
-        if len(self.hand_cards[self.getTurn()]) == 1:
+        if len(self.hand_cards[self.getTurn()]) == 1 and self.unoed != 1:
             self.lastOneCheckFlag = self.getTurn()
         else:
             self.lastOneCheckFlag = -1
@@ -259,3 +261,12 @@ class Uno_Manager:
     
     def getWaitSwap(self):
         return self.waitSwap
+
+    def getUnoed(self):
+        return self.unoed
+    
+    def resetUnoed(self):
+        self.unoed = 0
+    
+    def setUnoed(self):
+        self.unoed = 1
